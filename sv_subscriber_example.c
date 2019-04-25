@@ -1,7 +1,7 @@
 /*
  * sv_subscriber_example.c
  *
- * Example program for Sampled Values (SV) subscriber
+ * programme pour l'acquistion de Sampled Values (SV) : subscriber
  *
  */
 
