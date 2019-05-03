@@ -120,7 +120,7 @@ svUpdateListener (SVSubscriber subscriber, void* parameter, SVSubscriber_ASDU as
 
     /*
      * Accéder aux données requiert a priori une connaissance sur les données sur lesquels on travaille.
-     * For this example we assume a data set consisting of FLOAT32 values.
+
      * Une valeur INT32 est encodée en 4 octets. on peut trouver la première valeur 
      * INT 32 à l'octet de position 0, la seconde valeur à l'octet de position 4, 
      * la troisième valeur à l'octet de position 8,etc.
@@ -208,7 +208,7 @@ void *acquisition(void *donnees)
 	n=0;
     }
     
-    /* Arrête d'écouter les messages SV */
+    /* Arrête de l'écoute les messages SV */
     SVReceiver_stop(param->receiver);
     /* Netoyyage et libération des ressources */
     SVReceiver_destroy(param->receiver);
@@ -229,14 +229,14 @@ main(int argc, char** argv)
         SVReceiver_setInterfaceId(receiver, "eth0");
     }
     
-    /* création d'un bloc de données de thread de types data_ */
+    /* création d'un bloc de données de thread de type data_ */
     data_ thread_data;
     thread_data.receiver= receiver;
     /* décalaration de la thread */
     pthread_t thread_acquisition;
     /* création de la thread d'acquisition*/
     pthread_create(&thread_acquisition,NULL,acquisition,&thread_data);
-    /* le programme principal attend la fin des deux tâches */
+    /* le programme principal attend la fin de la tâche*/
     pthread_join(thread_acquisition,NULL); 
     return 0 ;
 }
