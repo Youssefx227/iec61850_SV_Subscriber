@@ -9,10 +9,17 @@ EXEC = sv_subscriber
 INCLUDE = -I../inc
 
 all: $(EXEC)
+<<<<<<< HEAD
 #$(EXEC): sv_subscriber_multi_channel.c
 $(EXEC): sv_subscriber_1MU_acquisition.c
 #			$(CC) $(INCLUDE)  sv_subscriber.c -o $(EXEC) $(CFLAGS) $(LIBPATH) $(LIB)
 			$(CC) $(INCLUDE) sv_subscriber_1MU_acquisition.c -o $(EXEC) $(CFLAGS) $(LIBPATH) $(LIB)
+=======
+#$(EXEC): sv_subscriber.c
+$(EXEC): sv_subscriber_phasor_extract.c
+#			$(CC) $(INCLUDE)  sv_subscriber.c -o $(EXEC) $(CFLAGS) $(LIBPATH) $(LIB)
+			$(CC) $(INCLUDE) sv_subscriber_phasor_extract.c -o $(EXEC) $(CFLAGS) $(LIBPATH) $(LIB)
+>>>>>>> ec8fcc9e65e881565b24fbc0d3df713224ea6c65
 #only goose publisher
 
 #$(EXEC): goose_publisher.c
