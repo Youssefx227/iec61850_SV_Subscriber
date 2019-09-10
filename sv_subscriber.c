@@ -17,7 +17,6 @@
  #include <unistd.h>
  #include <fcntl.h>
  #include <math.h>
- #include <time.h>
  #include <errno.h>
  #include <sys/syscall.h>
  #include <sys/time.h>
@@ -32,31 +31,35 @@
  #include <goose_publisher.h>
 
 
- #define nech 80*4  // nombre échantillons 
- #define fe 4000  // 
- #define f_50hz 50 
+ #define TWO_PI_OVER_THREE  2*M_PI/3
+
+
+ #define nech 80*50 // nombre échantillons
+ #define fe 4000  
+ #define f_50hz 50
+ #define nbre_signal 1
  static bool running = true;
 
 struct timeval maintenant;
 struct timeval debut_programme;
 struct timeval now;
-uint64_t TableauTimeStamp[nech];
-uint64_t t_between_ech [nech];
+const char* svid;
+uint64_t TableauTimeStamp [nech];
+uint64_t t_between_ech    [nech];
 uint64_t n [nech];
-double  ia [nech];
-double  ib [nech];
-double  ic [nech];
-double  in [nech];
-double  va [nech];
-double  vb [nech];
-double  vc [nech];
-double  vn [nech];
-double bufferFIR[nech];
+double  ia [nbre_signal][nech];
+double  ib [nbre_signal][nech];
+double  ic [nbre_signal][nech];
+double  in [nbre_signal][nech];
+double  va [nbre_signal][nech];
+double  vb [nbre_signal][nech];
+double  vc [nbre_signal][nech];
+double  vn [nbre_signal][nech];
 int nLoopListener =0;
 int min=0,max=0;
 int i =0;
 int k=0;
-int position =0;
+int position[nbre_signal]={0};
 /* Callback handler pour les messages SV reçus */
 bool depart=true;
 struct timeval before_usec;
@@ -65,75 +68,40 @@ struct timeval timer_usec;
 uint64_t timestamp_usec=0; /* timestamp in microsecond */
 
 
-/**
- *  la fonction quality prend en paramètre la qualité (entier) de la donnée reçu
- * elle renvoi une chaîne de caractère correpondant à la qualité
-**/
-char* quality (Quality Q){
+void saving_in_comtrade(){
 
-
-    char* q = 0;
-    switch(Q){
-
-	  case  8192 :
-		  q = "DERIVED";
-		  break;
-	  case  64 :
-		  q = "DETAIL:FAILURE";
-		  break;
-	  case 16  :
-		  q = "DETAIL:INACCURATE";
-		  break;
-	  case 512 :
-		  q = "DETAIL:INACCURATE";
-		  break;
-	  case 256 :
-		  q = "DETAIL:INCONSISTENT";
-		  break;
-	  case 128 :
-		  q = "DETAIL:OLD_DATA";
-		  break;
-	  case 32:
-		  q = "DETAIL:OSCILLATORY";
-		  break;
-	  case 8:
-		  q = "DETAIL:OUT_OF_RANGE";
-		  break;
-	  case 4:
-		  q = "DETAIL:OVERFLOW";
-		  break;
-	  case 4096 :
-		  q = "OPERATOR_BLOCKED";
-		  break;
-	  case 1024 :
-		  q = "SOURCE_SUBSTITUTED";
-		  break;
-	  case 2048 :
-		  q = "TEST";
-		  break;
-	  case 0:
-		  q = "VALIDITY:GOOD";
-		  break;
-	  case 2	:
-		  q = "VALIDITY:INVALID";
-		  break;
-	  case 3	:
-		  q = "VALIDITY:QUESTIONABLE";
-		  break;
-	  case 1	:
-		  q = "VALIDITY:RESERVED";
-		  break;
+  FILE *signal;
+  signal = fopen("./comtrade.csv","w+r");
+  //signal = fopen("./comtrade.dat","w+r");
+  for(int i=0;i<nech;i++){
+    fprintf(signal,"%ld,",n[i]);
+    fprintf(signal,"%s,",svid);
+    fprintf(signal,"%ld,",TableauTimeStamp[i]);
+   // fprintf(signal,"%ld,",t_between_ech[i]);
+    for(int j=0;j<nbre_signal;j++){
+      fprintf(signal,"%f,",va[j][i]);
+      fprintf(signal,"%f,",vb[j][i]);
+      fprintf(signal,"%f,",vc[j][i]);
+      fprintf(signal,"%f,",ia[j][i]);
+      fprintf(signal,"%f,",ib[j][i]);
+      if(j<(nbre_signal-1)){
+        fprintf(signal,"%f,",ic[j][i]);
+      }
+      else{ //enlève le symbole , quand on arrive en bout de ligne
+          fprintf(signal,"%f",ic[j][i]);
+      }
     }
-    return(q);
+      fprintf(signal,"\n");
+  }
+  fclose(signal);
 }
-
 
 void sigint_handler(int signalId)
 {
     running = 0;
 }
 
-void compute_DFT(double* input,double* phasor_mod,double* phasor_arg,int signal_length,int N){
+void compute_DFT(double *input,double* phasor_mod,double* phasor_arg,int signal_length,int N){
 
 	double sumreal=0,sumimag=0,sum1=0,sum2=0;
 	double output_real[signal_length];
@@ -151,10 +119,11 @@ void compute_DFT(double* input,double* phasor_mod,double* phasor_arg,int signal_
   	output_real[0]=0;
   	output_imag[0]=0;
 
+
   	for (int k =0;k<signal_length;k++){
 
 	    if(k<=N){
-	       output_real[k] = (2/(double)N)*output_real_f[k]+ sum1; 
+	       output_real[k] = (2/(double)N)*output_real_f[k]+ sum1;
 	       output_imag[k] = (2/(double)N)*output_imag_f[k]+ sum2;
 	       sum1 = output_real[k];
 	       sum2 = output_imag[k];
@@ -164,8 +133,8 @@ void compute_DFT(double* input,double* phasor_mod,double* phasor_arg,int signal_
     	   	    sumreal += output_real_f[i];
             	sumimag += output_imag_f[i];
     	    }
-    	    output_real[k] = (2/(double)N)*sumreal; 
-            output_imag[k] = (-2/(double)N)*sumimag;
+    	    output_real[k] = (2/(double)N)*sumreal;
+          output_imag[k] = (-2/(double)N)*sumimag;
         }
         phasor_mod [k] = sqrt(output_real[k]*output_real[k] + output_imag[k]*output_imag[k]);
          if(k>0){
@@ -176,141 +145,131 @@ void compute_DFT(double* input,double* phasor_mod,double* phasor_arg,int signal_
          }
  		 sumreal =0;
  		 sumimag =0;
-    } 
+    }
+}
 
-	/*
-		for(int n =0;n<N;n++){
-			angle = (2*M_PI)/N;
-			sumreal += input[n]*cos(n*angle);
-			sumimag += input[n]*sin(n*angle);
-			output_real [n]  =  2/N  *input[n]*cos(n*angle);
-            output_imag [n] = (-2)/N *input[n]*sin(n*angle);
-            phasor_mod[n] = sqrt(pow(output_real[n],2.0) + pow(output_imag[n],2.0));
-            phasor_arg[n] =  atan2(output_imag[n],output_real[n]) * (180.0/M_PI);
-		}
-		*/
-		//phasor[0] = sqrt(pow(output_real,2.0) + pow(output_imag,2.0));
-        //phasor[1] = atan2(output_imag,output_real) * (180.0/M_PI);
-	//printf("phasor : %f -------  %f\n",phasor[0], phasor [1]);
+void FIR(double *buffer,double* bufferFIR,int fc){
 
-} 
-
-void FIR(double* buffer,int fc){
-
-	double a = (double) fc/(double)fe;     
-	int M= 3;           // coefficent du filtre 
+	double a = (double) fc/(double)fe;
+	int M= 3;           // coefficent du filtre
 	double w[M+1],h[M+1];
 	double sum =0;
-
 	for( int k=0;k<=M;k++){
-
 		if((k-M/2)==0){
-
 			h[k] =2*M_PI*a;
 		}
-		else{
 
+		else{
 			h[k] =  sin(2*M_PI*(k-M/2)*a)/(k-M/2);
 		}
-	
 		//== hamming window == //
 	  //  w[k] = 0.54-0.46*cos(2*M_PI*k/M);
 		//== Blackman window ==//
 		w[k] = 0.42  - 0.5*cos(2*M_PI*k/M) + 0.08*cos(4*M_PI*k/M);
 
 		h[k] = h[k]*w[k];
-		sum = sum + h[k]; 
+		sum = sum + h[k];
 	}
 	for( int k=0;k<=M;k++){     // normaliser le filtre passe bas kernel pour avoir
 		h[k] = h[k]/sum;        // un gain unitaire en DC
 	}
-	
+
 
 	for(int i=0;i<nech;i++){   // produit de convolution du signal d'entrée et du filtre kernel
-		for (int k=0;k<=M;k++){	
+		for (int k=0;k<=M;k++){
 			if((i-k)>=0){
-				bufferFIR[i] += h[k]*buffer[i-k];	
+				bufferFIR[i] += h[k]*buffer[i-k];
 			}
 			else{
-				bufferFIR[i] += 0;	
+				bufferFIR[i] += 0;
 			}
 		}
 	}
 }
 
-
-void decimate(double* buffer,int factorDecimation, int nloop,const char* phasor_name,const char* filename ,FILE* file)
+void decimate(double *buffer,double* phasor_mod,double* phasor_arg,int factorDecimation, int nloop,int length_buf,const char* phasor_name)
 {
 	int fc = 1000 ; // fréquence de coupure
-    int factor = factorDecimation;
-    int i =0;
+        int i =0;
 	int NbreSamples = nloop;
-    int length_buf= nech/factor;
 	double bufferDownsampled [length_buf];
-	double phasor_mod[length_buf];
-	double phasor_arg [length_buf];
-    if(NbreSamples==(nech-1)){
-    	FIR (buffer,fc);  //filtrage numérique
+	double bufferFIR[nech];
+        if(NbreSamples==(nech-1)){
+    	FIR (buffer,bufferFIR,fc);  //filtrage numérique
     	FILE *doc;
     	char docname [100] = "./signal_filtré_";
     	strcat(docname,phasor_name);
     	strcat(docname,".csv");
         doc = fopen(docname, "w+r");
-		while(i<=NbreSamples){
+	 	while(i<=NbreSamples){
 			fprintf(doc,"%s\t","signal de sortie filtré");
 			fprintf(doc,"%s\n","signal d'origine");
 			for(int j=0;j<length_buf;j++){
-				bufferDownsampled [j] = bufferFIR[i];	
+				bufferDownsampled [j] = bufferFIR[i];
 				fprintf(doc,"%f\t",bufferDownsampled [j]);
 				fprintf(doc,"%f\n",buffer[i]);
 				bufferFIR[i]=0;
-				i+=factor;
+				i+=factorDecimation;
 			}
-		}
-
 		fclose(doc);
-		compute_DFT(bufferDownsampled,phasor_mod,phasor_arg,length_buf,(fe/(f_50hz*factor)));
-		if(k==length_buf){
-			file = fopen(filename,"w+r");
-			fprintf(file,"%s\n",phasor_name);
-			fprintf(file,"%s\t","module");
-			fprintf(file,"\t%s\n","argument");
-			for(int i=0;i<k;i++){
-				fprintf(file,"%f\t%f\n",phasor_mod[i],phasor_arg[i]);
-			}
-		    fclose(file);
-		    k=0;
 		}
-		k+=1;
+		compute_DFT(bufferDownsampled,phasor_mod,phasor_arg,length_buf,(fe/(f_50hz*factorDecimation)));
 	}
-
 }
 
-
-void phasor_extract (){
+void phasor_extraction (){
 
 	int factorDecimation =2;
-	FILE * file_va =NULL;//,*file_vb,*file_vc,*file_vn;
-	FILE * file_ia =NULL;//,*file_ib, *file_ic,*file_in;
+	FILE * file_va =NULL,*file_vb=NULL,*file_vc=NULL,*file_vn=NULL;
+	FILE * file_ia =NULL,*file_ib=NULL, *file_ic=NULL,*file_in=NULL;
+  int length_buf= nech/factorDecimation;
+  double va_mod[length_buf],vb_mod[length_buf],vc_mod[length_buf],vn_mod[length_buf];
+  double va_arg [length_buf],vb_arg[length_buf],vc_arg[length_buf],vn_arg[length_buf];
+  double ia_arg[length_buf],ib_arg[length_buf],ic_arg[length_buf],in_mod[length_buf];
+  double ia_mod [length_buf],ib_mod[length_buf],ic_mod[length_buf],in_arg[length_buf];
+  for(int i =0;i<nbre_signal;i++) {
+    
+   //  decimate(&(vn[i][nech]),vn_mod,vn_arg,factorDecimation,nLoopListener,length_buf);
+   //  decimate(&(in[i][nech]),in_mod,in_arg,factorDecimation,nLoopListener,length_buf);
+    // decimate(&(va[i][nech]),va_mod,va_arg,factorDecimation,nLoopListener,length_buf);
+    // decimate(&(vb[i][nech]),vb_mod,vb_arg,factorDecimation,nLoopListener,length_buf);
+    // decimate(&(vc[i][nech]),vc_mod,vc_arg,factorDecimation,nLoopListener,length_buf);
+     decimate(&(ia[i][nech]),ia_mod,ia_arg,factorDecimation,nLoopListener,length_buf,"Ia");
+    // decimate(&(ib[i][nech]),ib_mod,ib_arg,factorDecimation,nLoopListener,length_buf);
+    // decimate(&(ic[i][nech]),ic_mod,ic_arg,factorDecimation,nLoopListener,length_buf);
+    }
 
-	decimate(va,factorDecimation,nLoopListener,"va phasor","./va_file.csv",file_va);
-	decimate(ia,factorDecimation,nLoopListener,"ia phasor","./ia_file.csv",file_ia);
+
+  FILE *phasor_csv;
+  phasor_csv = fopen("./phasor_tab.csv","w+r");
+  //char* en_tete1 ="va\t\tvb\t\tvc\t\tia\t\tib\t\tic";
+   char* en_tete1 ="ia";
+  fprintf(phasor_csv,"%s\n",en_tete1);
+  for(int i=0;i<length_buf;i++){
+	// fprintf(phasor_csv,"%f\t%f\t",va_mod[i],va_arg[i]);
+	// fprintf(phasor_csv,"%f\t%f\t",vb_mod[i],vb_arg[i]);
+	// fprintf(phasor_csv,"%f\t%f\t",vc_mod[i],vc_arg[i]);
+	 fprintf(phasor_csv,"%f\t%f\n",ia_mod[i],ia_arg[i]);
+	// fprintf(phasor_csv,"%f\t%f\t",ib_mod[i],ib_arg[i]);
+	// fprintf(phasor_csv,"%f\t%f\n",ic_mod[i],ic_arg[i]);
+    }
+	fclose(phasor_csv);
 
 }
 
-
+int sig_num = 0;
 static void
 svUpdateListener (SVSubscriber subscriber, void* parameter, SVSubscriber_ASDU asdu)
 {
-	/*
     //printf("svUpdateListener called\n");
+	/*
     if(depart==true){
       gettimeofday(&before_usec, NULL);
       before  = ((uint64_t) before_usec.tv_sec) * 1000000 +
                  (uint64_t) before_usec.tv_usec;
       depart=false;
     }
-    */
+  */
     /*
      * Accéder aux données requiert à priori une connaissance sur la structure de données sur laquelle on travaille.
 
@@ -320,31 +279,44 @@ svUpdateListener (SVSubscriber subscriber, void* parameter, SVSubscriber_ASDU as
      * Pour prévenir les erreurs due à la configuration,il faut relever la nech du bloc de
      * données des messages SV avant d'accéder aux données.
      */
-    if (SVSubscriber_ASDU_getDataSize(asdu) >= 8) {
+    if (SVSubscriber_ASDU_getDataSize(asdu) >= 8 ){
 
-	  if(position>(nech-1)){
-	    	position =0;
-	  }
+     /* gettimeofday(&timer_usec, NULL);
+      timestamp_usec = ((uint64_t) timer_usec.tv_sec) * 1000000 +
+                       (uint64_t) timer_usec.tv_usec;
+     */
+     // Timestamp ts;
+      //Timestamp_clearFlags(&ts);
+     // ts= SVSubscriber_ASDU_getTimestamp(asdu,64);
+      //timestamp_usec = (long long int) Timestamp_getTimeInMs(&ts);
+      //timestamp_usec = Timestamp_getTimeInSeconds(&ts);
+      TableauTimeStamp [position[sig_num]] = (long long int) SVSubscriber_ASDU_getRefrTmAsMs (asdu);
+	    /*commence à 1 pour le champ index du format .dat comtrade*/
+	      n[position[sig_num]] = position[sig_num]+1;
 
-      n  [position] = SVSubscriber_ASDU_getSmpCnt(asdu);
-      ia [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 0)/1000);
-      ib [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 8)/1000);
-      ic [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 16)/1000);
-      in [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 24)/1000);
-      va [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 32)/100);
-      vb [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 40)/100);
-      vc [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 48)/100);
-      vn [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 56)/100);
+        svid   = SVSubscriber_ASDU_getSvId(asdu);
 
-     // gettimeofday(&timer_usec, NULL);
-     // timestamp_usec = ((uint64_t) timer_usec.tv_sec) * 1000000 +
-     //                (uint64_t) timer_usec.tv_usec;
-    //  TableauTimeStamp[position] = timestamp_usec;
-     // t_between_ech   [position] = (timestamp_usec - before);
-      nLoopListener = position; //nombre de fois de l'appel de la fonction
-      position += 1;
-     // before  = timestamp_usec; // sauvegarde du timestamp précédent
-	
+        ia [sig_num][position[sig_num]] = (double) (SVSubscriber_ASDU_getINT32(asdu, 0)/ 1000);
+        ib [sig_num][position[sig_num]] = (double) (SVSubscriber_ASDU_getINT32(asdu, 8)/ 1000);
+        ic [sig_num][position[sig_num]] = (double) (SVSubscriber_ASDU_getINT32(asdu, 16)/1000);
+       // in [sig_num][position[sig_num]] = (double) (SVSubscriber_ASDU_getINT32(asdu, 24)/1000);
+        va [sig_num][position[sig_num]] = (double) (SVSubscriber_ASDU_getINT32(asdu, 32)/100);
+        vb [sig_num][position[sig_num]] = (double) (SVSubscriber_ASDU_getINT32(asdu, 40)/100);
+        vc [sig_num][position[sig_num]] = (double) (SVSubscriber_ASDU_getINT32(asdu, 48)/100);
+      //  vn [sig_num][position[sig_num]] = (double) (SVSubscriber_ASDU_getINT32(asdu, 56)/100);
+
+/*
+        gettimeofday(&timer_usec, NULL);
+        timestamp_usec = ((uint64_t) timer_usec.tv_sec) * 1000000 +
+                         (uint64_t) timer_usec.tv_usec;
+*/
+ //      t_between_ech   [position[sig_num]] = (timestamp_usec - before);
+        nLoopListener = position[sig_num]; //nombre de fois de l'appel de la fonction
+        position[sig_num] += 1;
+        if(position[sig_num]>(nech-1)){
+    	    position[sig_num] =0;
+    	}
+    //   before  = timestamp_usec; // sauvegarde du timestamp précédent
     }
 }
 
@@ -360,30 +332,34 @@ int main(int argc, char** argv)
   CPU_ZERO(&cpuset);
   /* CPU_SET: This macro adds cpu to the CPU set set */
   CPU_SET(core_id, &cpuset);
-  /* pthread_setaffinity_np: La fonction pthread_setaffinity()  fixe  le masque du CPU_affinity de la thread au CPU pointé par cpuset. Si l'appel est un succes, et la thread n'est pas déjà entrain de tourner sur un des  CPU dans cpuset, alors il est migré vers un de ces CPUs */
+  /* pthread_setaffinity_np: La fonction pthread_setaffinity()  fixe  le masque du CPU_affinity de la thread au CPU pointé par cpuset.
+     Si l'appel est un succes, et la thread n'est pas déjà entrain de tourner sur un des  CPU dans cpuset, alors il est migré vers un de ces CPUs */
   sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
 
-
   SVReceiver receiver = SVReceiver_create();
-  uint16_t appid =0;
   const char* filename =0;
+  uint64_t appid[nbre_signal] = {0};
   if (argc > 1){
+  	/* interface réseau ou connecter le receiver si configuré */
       SVReceiver_setInterfaceId(receiver, argv[1]);
-      appid = strtol(argv[3],NULL,16);
-      filename = argv[4];
+      /*récupère un nom de fichier si configuré*/
+      filename = argv[3];
+
   }
   else {
       printf("Using interface eth0\n");
       SVReceiver_setInterfaceId(receiver, "eth0");
   }
 
-    /* Créer un subscriber écoutant les messages SV  avec un APPID */
-    SVSubscriber subscriber = SVSubscriber_create(NULL,appid);
+    SVSubscriber subscriber [nbre_signal];
 
-    SVSubscriber_setListener(subscriber, svUpdateListener, NULL);
-    /* Connecter le subscriber au receiver */
-    SVReceiver_addSubscriber(receiver, subscriber);
-
+    for(i=0;i<nbre_signal;i++){
+      /* Créer un subscriber écoutant les messages SV  avec un APPID 0x4000 par défaut */
+      subscriber[i] = SVSubscriber_create(NULL,0x4000);
+      SVSubscriber_setListener(subscriber[i], svUpdateListener, NULL);
+      /* Connecter le subscriber au receiver */
+      SVReceiver_addSubscriber(receiver, subscriber[i]);
+    }
     /* Commencer à écouter les messages SV - commence une nouvelle tâche de receiver en arrière-plan */
     SVReceiver_start(receiver);
 
@@ -391,12 +367,13 @@ int main(int argc, char** argv)
 
     //gettimeofday(&debut_programme,NULL);
 
-
     while (running) {
 
+    //	saving_in_comtrade();
     	 /** fonction qui sous-échantillonne tous les signaux d'entrées (+ filtrage anti-repliement)
     	     diminue le taux d'échantillonnage  */
-    	phasor_extract();
+    	phasor_extraction();
+
         //gettimeofday(&maintenant,NULL);
 /*
         if (maintenant.tv_sec - debut_programme.tv_sec >5){ // supérieur à une durée fixé dans la variable nech
