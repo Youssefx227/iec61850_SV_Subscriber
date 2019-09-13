@@ -177,21 +177,6 @@ void compute_DFT(double* input,double* phasor_mod,double* phasor_arg,int signal_
  		 sumimag =0;
     } 
 
-	/*
-		for(int n =0;n<N;n++){
-			angle = (2*M_PI)/N;
-			sumreal += input[n]*cos(n*angle);
-			sumimag += input[n]*sin(n*angle);
-			output_real [n]  =  2/N  *input[n]*cos(n*angle);
-            output_imag [n] = (-2)/N *input[n]*sin(n*angle);
-            phasor_mod[n] = sqrt(pow(output_real[n],2.0) + pow(output_imag[n],2.0));
-            phasor_arg[n] =  atan2(output_imag[n],output_real[n]) * (180.0/M_PI);
-		}
-		*/
-		//phasor[0] = sqrt(pow(output_real,2.0) + pow(output_imag,2.0));
-        //phasor[1] = atan2(output_imag,output_real) * (180.0/M_PI);
-	//printf("phasor : %f -------  %f\n",phasor[0], phasor [1]);
-
 } 
 
 void FIR(double* buffer,int fc){
@@ -258,17 +243,13 @@ void decimate(double* buffer,int factorDecimation, int nloop,const char* phasor_
         doc = fopen(docname, "w+r");
 		while(i<=NbreSamples){
 			fprintf(doc,"%s\t","signal de sortie filtré sousech" );
-			fprintf(doc,"%s\n","signal filtré");
 			for(int j=0;j<length_buf;j++){
 				bufferDownsampled [j] = bufferFIR[i];	
 				fprintf(doc,"%f\n",bufferDownsampled [j]);
 				i+=factor;
 			}
-			for(int i=0;i<nech;i++){
-				fprintf(doc,"\t%f\n",bufferFIR[i]);
-				bufferFIR[i]=0;
-			}
 		}
+		/*calcul phaseur & enregistrement dans un fichier*/
 		compute_DFT(bufferDownsampled,phasor_mod,phasor_arg,length_buf,(fe/(f_50hz*factor)));
 			file = fopen(filename,"w+r");
 			fprintf(file,"%s\n",phasor_name);
@@ -289,7 +270,7 @@ void phasor_extract (){
 	int factorDecimation =2;
 	FILE * file_va =NULL;//,*file_vb,*file_vc,*file_vn;
 	FILE * file_ia =NULL;//,*file_ib, *file_ic,*file_in;
-
+	/*appel de la fonction decimate pour sous-échantillonner,filtrer et calculer les phaseurs*/
 	//decimate(va,factorDecimation,nLoopListener,"va phasor","./va_file.csv",file_va);
 	decimate(ia,factorDecimation,nLoopListener,"ia phasor","./ia_file.csv",file_ia);
 
@@ -299,7 +280,7 @@ void phasor_extract (){
 static void
 svUpdateListener (SVSubscriber subscriber, void* parameter, SVSubscriber_ASDU asdu)
 {
-	/*
+	
     //printf("svUpdateListener called\n");
     if(depart==true){
       gettimeofday(&before_usec, NULL);
@@ -307,7 +288,7 @@ svUpdateListener (SVSubscriber subscriber, void* parameter, SVSubscriber_ASDU as
                  (uint64_t) before_usec.tv_usec;
       depart=false;
     }
-    */
+
     /*
      * Accéder aux données requiert à priori une connaissance sur la structure de données sur laquelle on travaille.
      * Une valeur INT32 est encodée en 4 octets. on peut trouver la première valeur
@@ -332,14 +313,14 @@ svUpdateListener (SVSubscriber subscriber, void* parameter, SVSubscriber_ASDU as
       vc [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 48)/100);
       vn [position] = (double) (SVSubscriber_ASDU_getINT32(asdu, 56)/100);
 
-     // gettimeofday(&timer_usec, NULL);
-     // timestamp_usec = ((uint64_t) timer_usec.tv_sec) * 1000000 +
-     //                (uint64_t) timer_usec.tv_usec;
-    //  TableauTimeStamp[position] = timestamp_usec;
-     // t_between_ech   [position] = (timestamp_usec - before);
+      gettimeofday(&timer_usec, NULL);
+      timestamp_usec = ((uint64_t) timer_usec.tv_sec) * 1000000 +
+                     (uint64_t) timer_usec.tv_usec;
+      TableauTimeStamp[position] = timestamp_usec;
+      t_between_ech   [position] = (timestamp_usec - before);
       nLoopListener = position; //nombre de fois de l'appel de la fonction
       position += 1;
-     // before  = timestamp_usec; // sauvegarde du timestamp précédent
+      before  = timestamp_usec; // sauvegarde du timestamp précédent
 	
     }
 }
@@ -385,7 +366,7 @@ int main(int argc, char** argv)
 
     signal(SIGINT, sigint_handler);
 
-    //gettimeofday(&debut_programme,NULL);
+    gettimeofday(&debut_programme,NULL);
 
 
     while (running) {
@@ -393,8 +374,8 @@ int main(int argc, char** argv)
     	 /** fonction qui sous-échantillonne tous les signaux d'entrées (+ filtrage anti-repliement)
     	     diminue le taux d'échantillonnage  */
     	phasor_extract();
-        //gettimeofday(&maintenant,NULL);
-/*
+        gettimeofday(&maintenant,NULL);
+
         if (maintenant.tv_sec - debut_programme.tv_sec >5){ // supérieur à une durée fixé dans la variable nech
           int j =0;
           FILE *fichier;
@@ -415,7 +396,7 @@ int main(int argc, char** argv)
           }
             break;
         }
-*/
+
     }
 /* Arrête de l'écoute les messages SV */
  SVReceiver_stop(receiver);
