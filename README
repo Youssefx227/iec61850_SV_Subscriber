@@ -1,0 +1,9 @@
+Le programme SV_SUbscriber a pour objectif l'acquisition de valeurs échantillonnées 
+Le script run_sv_subscriber.sh permet de lancer dans un terminal ubuntu le fichier exécutable sv_subscriber avec plusieurs paramètre d'entrées
+Le programme SV_Subscriber multichannel est encore en cours de développement
+Dans le programme  SV_Subscriber, est écrit plusieurs fonctions :
+
+SVUpdateListener() comme défini par la lib61850 permettant de récupérer les SV et les enregistrer dans des buffers
+phasor_extract () qui appele la fonction decimate (calcul en phaseur)
+FIR() pour le filtrage passe-bas numérique
+Compute TFD () Transformé de Fourier discrète
